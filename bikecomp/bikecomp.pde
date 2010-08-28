@@ -74,13 +74,21 @@ void speeddisp(int val) {
 }    
 
 void calculations(void) {
-  unsigned int gap = 0;
+  unsigned long gap = 0;
   unsigned long now;
+  unsigned int calc = 0;
 
   now = millis();
   gap = now - oldtime; 
   // 2437 is a constant to get to mph 
-  velo = 2437/gap;
+  calc = 2437/gap;
+  
+  if (  calc > 99 ){
+    velo = 99;
+  }
+  else {
+    velo = calc;
+  }
   
   oldtime = now;
 
@@ -115,9 +123,14 @@ void setup() {
   pinMode(dataPin, OUTPUT);
   pinMode(val1pin, OUTPUT);
   pinMode(val2pin, OUTPUT);
-  Serial.begin(9600);
+  Serial.begin(9600); // TODO: change to 115200
   //Serial.print(0x76, HEX); //reset display. NOT WORKING
   Serial.print('v');
+  serialsegments(dist);
+  // Tested this interrupt with a dremel and a coloured mopwheel
+  // similar to real-world setup. Worked at half-speed which calculates
+  // to 720MPH or ~56000rpm of the dremel. At any higher speed the time to
+  // increment a mile takes longer.
   attachInterrupt(0, calculations, CHANGE); // pin 3
 }
 
