@@ -1,4 +1,4 @@
-u#include <Wire.h>
+#include <Wire.h>
 #define DEV_ADDR 0x50 //eeprom addr
 const char* const HASH = "210d5292498ff0f2"; // eeprom hash
 
@@ -14,7 +14,9 @@ boolean seg1 = true;
 boolean seg2 = false;
 
 volatile int velo = 0; // speed 
-volatile int dist = 0; // odometer
+volatile unsigned int count = 0; 
+volatile unsigned int dist = 0; // odometer
+volatile unsigned long oldtime = 0; // the millis time of last interrupt
 
 byte i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress ) {
   byte rdata = 0xFF;
@@ -71,20 +73,30 @@ void speeddisp(int val) {
       delay(7);
 }    
 
-void mphcalc(void) {
-  if (velo > 99){
-    velo = 0;
-  }
-  else{
-    velo += 1;
-  }
-  if (dist > 9999) {
-    dist = 0;
+void calculations(void) {
+  unsigned int gap = 0;
+  unsigned long now;
+
+  now = millis();
+  gap = now - oldtime; 
+  // 2437 is a constant to get to mph 
+  velo = 2437/gap;
+  
+  oldtime = now;
+
+  // Odometer calculations
+  // 4641 triggers per mile based
+  // on wheel circumference
+  // TODO: make these variables pertinent i.e eeprom
+  if (count > 4641) {
+    dist += 1;
+    serialsegments(dist);
+    count = 0;
   }
   else {
-    dist += 1;
+    count += 1;
   }
-  serialsegments(dist);
+  
 }
 
 void checkup() {
@@ -104,8 +116,9 @@ void setup() {
   pinMode(val1pin, OUTPUT);
   pinMode(val2pin, OUTPUT);
   Serial.begin(9600);
-  Serial.print(0x76, HEX); //reset display
-  attachInterrupt(0, mphcalc, CHANGE); // pin 3
+  //Serial.print(0x76, HEX); //reset display. NOT WORKING
+  Serial.print('v');
+  attachInterrupt(0, calculations, CHANGE); // pin 3
 }
 
 void loop() {
