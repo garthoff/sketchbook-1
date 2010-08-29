@@ -17,8 +17,7 @@ boolean seg1 = true;
 boolean seg2 = false;
 
 volatile int velo = 0; // speed 
-volatile unsigned int count = 0; 
-volatile unsigned int dist = EEPROM.read(1); // odometer
+volatile unsigned int count,dist; // odometer
 volatile unsigned long oldtime = 0; // the millis time of last interrupt
 
 byte i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress ) {
