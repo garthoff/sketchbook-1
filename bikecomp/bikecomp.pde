@@ -1,13 +1,14 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #define DEV_ADDR 0x50 //eeprom addr
-const char* const HASH = "210d5292498ff0f2"; // eeprom hash
+const char HASH[] = "812500507"; // eeprom hash
 // values required per integer to be shown on 7seg
 const int array[] = {64,118,33,36,22,12,8,102,0,6}; 
 
 int latchPin = 11; //ST_CP of 74HC595
 int clockPin = 10; //SH_CP of 74HC595
 int dataPin = 12; // DS of 74HC595
+int ignition = 9;
 
 
 int val1pin = 3; // segment 1
@@ -20,26 +21,36 @@ volatile int velo = 0; // speed
 volatile unsigned int count,dist; // odometer
 volatile unsigned long oldtime = 0; // the millis time of last interrupt
 
-byte i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress ) {
+void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
+  int rdata = data;
+  Wire.beginTransmission(0x50);
+  Wire.send((int)(eeaddress >> 8)); // MSB
+  Wire.send((int)(eeaddress & 0xFF)); // LSB
+  Wire.send(rdata);
+  Wire.endTransmission();
+}
+
+byte i2c_eeprom_read_byte(unsigned int eeaddress ) {
   byte rdata = 0xFF;
-  Wire.beginTransmission(deviceaddress);
+  Wire.beginTransmission(DEV_ADDR);
   Wire.send((int)(eeaddress >> 8)); // MSB
   Wire.send((int)(eeaddress & 0xFF)); // LSB
   Wire.endTransmission();
-  Wire.requestFrom(deviceaddress,1);
+  Wire.requestFrom(DEV_ADDR,1);
   if (Wire.available()) rdata = Wire.receive();
-  return rdata;
+    return rdata;
 }
 
-boolean check_hash(){
-  // checks to see if the hash n the eeprom matches the constant
+
+// checks to see if the hash n the eeprom matches the constant
+boolean check_hash(){  
   static int addr = 0;
-  byte b = i2c_eeprom_read_byte(DEV_ADDR, addr);
+  byte b = i2c_eeprom_read_byte(addr);
   while (b != 0){
     if (b != HASH[addr])
       return false;
     addr++;
-    b = i2c_eeprom_read_byte(DEV_ADDR, addr);
+    b = i2c_eeprom_read_byte(addr);
   }
   return true;
 }
@@ -83,7 +94,7 @@ void calculations(void) {
   unsigned long gap = 0;
   unsigned long now;
   unsigned int calc = 0;
-  unsigned int tenth = 0;
+  int tenth = 0;
 
   now = millis();
   gap = now - oldtime; 
@@ -108,11 +119,12 @@ void calculations(void) {
   if (count > 4641) {
     dist += 1;
     serialsegments(dist);
+    
     EEPROM.write(0,0); // tenth of a mile val
     EEPROM.write(1,dist);
     count = 0;
   }
-  // TODO: update eeprom with a 1/10th mile val
+  // update eeprom with a 1/10th mile val
   else {
     // I think it's more efficent to do
     // this rather than maths like modulu and rem
@@ -147,6 +159,7 @@ void calculations(void) {
     }
     // only write when travelled a 1/10th
     if ( tenth != 0 ){
+      // cannot use wire from interrupt
       EEPROM.write(0,tenth);
     }
     count += 1;
@@ -158,9 +171,12 @@ void setup() {
   //set pins to output so you can control the shift register
   Wire.begin();
   
+  pinMode(ignition, OUTPUT);
+  
   // If the hash in the keyfob(eeprom) does not 
   // read correctly, wait forever
   while ( check_hash()  == false) {
+    digitalWrite(ignition, LOW); // ensure ignition is disabled
     delay(1000);
   }
   
@@ -170,13 +186,18 @@ void setup() {
   pinMode(val1pin, OUTPUT);
   pinMode(val2pin, OUTPUT);
   
+  // enable ignition
+  digitalWrite(ignition, HIGH);
+  
   // the odometer values
   count = EEPROM.read(0) * 464; // 1/10ths of a mile
   dist = EEPROM.read(1); // miles
+
   
   Serial.begin(57600); // Highest ser-disp will allow
   Serial.print('v');
   serialsegments(dist);
+
   
   // Tested this interrupt with a dremel and a coloured mopwheel
   // similar to real-world setup. Worked at half-speed which calculates
@@ -188,5 +209,7 @@ void setup() {
 void loop() {
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
-  speeddisp(velo);      
+  speeddisp(velo); 
+  // This is the place to write to the i2ceeprom
+  // wire.h does not like isr  
 }
