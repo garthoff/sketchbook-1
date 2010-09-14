@@ -17,8 +17,8 @@ int val2pin = 4; // segment 2
 boolean seg1 = true;
 boolean seg2 = false;
 
-volatile int velo = 0; // speed 
-volatile unsigned int count,dist; // odometer
+volatile int tenth,oldtenth,velo = 0; // speed 
+volatile unsigned int count,dist,olddist; // odometer
 volatile unsigned long oldtime = 0; // the millis time of last interrupt
 
 void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
@@ -28,6 +28,7 @@ void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
   Wire.send((int)(eeaddress & 0xFF)); // LSB
   Wire.send(rdata);
   Wire.endTransmission();
+  delay(5);
 }
 
 byte i2c_eeprom_read_byte(unsigned int eeaddress ) {
@@ -94,7 +95,6 @@ void calculations(void) {
   unsigned long gap = 0;
   unsigned long now;
   unsigned int calc = 0;
-  int tenth = 0;
 
   now = millis();
   gap = now - oldtime; 
@@ -168,6 +168,7 @@ void calculations(void) {
 }
 
 void setup() {
+  unsigned int lsb,msb;
   //set pins to output so you can control the shift register
   Wire.begin();
   
@@ -190,15 +191,29 @@ void setup() {
   digitalWrite(ignition, HIGH);
   
   // the odometer values
-  count = EEPROM.read(0) * 464; // 1/10ths of a mile
-  dist = EEPROM.read(1); // miles
-
+  tenth = i2c_eeprom_read_byte(10);
+  //tenth = EEPROM.read(0); // 1/10ths of a mile
+  oldtenth = tenth;
+  count = tenth * 464; // counts since last mile
+  lsb = i2c_eeprom_read_byte(21);
+  msb = i2c_eeprom_read_byte(20) ;
+  dist = (msb << 8) | lsb;
+  //dist = EEPROM.read(1); // miles
+  olddist = dist;
+  
+  
   
   Serial.begin(57600); // Highest ser-disp will allow
   Serial.print('v');
   serialsegments(dist);
-
   
+//  Serial.print(msb);
+//  Serial.print(':');
+//  Serial.print(lsb);
+//  Serial.print(tenth);
+//  Serial.print(':');
+//  Serial.println(dist);
+
   // Tested this interrupt with a dremel and a coloured mopwheel
   // similar to real-world setup. Worked at half-speed which calculates
   // to 720MPH or ~56000rpm of the dremel. At any higher speed the time to
@@ -211,5 +226,24 @@ void loop() {
   // the time as the 7segs are being multiplexed
   speeddisp(velo); 
   // This is the place to write to the i2ceeprom
-  // wire.h does not like isr  
+  // wire.h does not like isr
+
+  if (dist > olddist){
+    // eeprom stuff
+    olddist = dist;
+    int lsb,msb;
+    msb = dist >> 8;
+    lsb = dist & 0xFF;
+    //Serial.print(msb,BIN);
+    //Serial.print(':');
+    //Serial.println(lsb,BIN);
+    i2c_eeprom_write_byte(20,msb);
+    i2c_eeprom_write_byte(21,lsb);
+    i2c_eeprom_write_byte(10,0); // must mean tenth has zeroed as well
+  }
+   else if (tenth > oldtenth){
+    // eeprom stuff
+    oldtenth = tenth;
+    i2c_eeprom_write_byte(10,tenth);
+  }
 }
