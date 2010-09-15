@@ -17,9 +17,13 @@ int val2pin = 4; // segment 2
 boolean seg1 = true;
 boolean seg2 = false;
 
-volatile int tenth,oldtenth,velo = 0; // speed 
-volatile unsigned int count,dist,olddist; // odometer
-volatile unsigned long oldtime = 0; // the millis time of last interrupt
+volatile int tenth,velo = 0; // speed 
+volatile unsigned int count,dist; // odometer
+volatile unsigned long split =0, oldtime = 0; // the millis time of last interrupt
+
+int oldtenth;
+unsigned int olddist;
+
 
 void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
   int rdata = data;
@@ -98,15 +102,22 @@ void calculations(void) {
 
   now = millis();
   gap = now - oldtime; 
-  // 2437 is a constant to get to mph 
-  calc = 2437/gap;
   
-  // the display will only show up to 99
-  if (  calc > 99 ){
-    velo = 99;
-  }
-  else {
-    velo = calc;
+  // do not want to update speed every interrupt (too fast)
+  // could average in the meantime?
+  if (  (now - split) > 250){  
+    // 2437 is a constant to get to mph 
+    calc = 2437/gap;
+    
+    // the display will only show up to 99
+    if (  calc > 99 ){
+      velo = 99;
+    }
+    else {
+      velo = calc;
+    }
+    
+    split = now;
   }
   
   oldtime = now;
@@ -224,7 +235,9 @@ void setup() {
 void loop() {
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
-  speeddisp(velo); 
+  speeddisp(velo);   
+
+
   // This is the place to write to the i2ceeprom
   // wire.h does not like isr
 
