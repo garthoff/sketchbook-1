@@ -127,7 +127,7 @@ void calculations(void) {
   // on wheel circumference
   // Would be a total of 100k writes per 10,000miles (max of display)
   // 100k is max erase/write cycles of At168 (datasheet)
-  if (count > 4641) {
+  if (count > 1477) {
     dist += 1;
     serialsegments(dist);
     
