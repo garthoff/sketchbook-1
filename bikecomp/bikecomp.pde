@@ -139,32 +139,33 @@ void calculations(void) {
   else {
     // I think it's more efficent to do
     // this rather than maths like modulu and rem
+    // counts per mile = 1601/(pi*D)
     switch ( count ) {
-      case 464:
+      case 148:
         tenth = 1;
         break;
-      case 928:
+      case 295:
         tenth = 2;
         break;
-      case 1392:
+      case 443:
         tenth = 3;
         break;
-      case 1856:
+      case 591:
         tenth = 4;
         break;
-      case 2320:
+      case 739:
         tenth = 5;
         break;
-      case 2784:
+      case 886:
         tenth = 6;
         break;
-      case 3248:
+      case 1034:
         tenth = 7;
         break;
-      case 3712:
+      case 1182:
         tenth = 8;
         break;
-      case 4176:
+      case 1329:
         tenth = 9;
         break;
     }
