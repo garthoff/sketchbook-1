@@ -4,6 +4,8 @@
 const char HASH[] = "812500507"; // eeprom hash
 // values required per integer to be shown on 7seg
 const int array[] = {64,118,33,36,22,12,8,102,0,6}; 
+const int tenthADDR = 10; // Address in EEPROM
+const int odomADDR = 20;
 
 int latchPin = 11; //ST_CP of 74HC595
 int clockPin = 10; //SH_CP of 74HC595
@@ -17,12 +19,14 @@ int val2pin = 4; // segment 2
 boolean seg1 = true;
 boolean seg2 = false;
 
-volatile int tenth,velo = 0; // speed 
+volatile int splitcnt=0,tenth,velo = 0; // speed 
 volatile unsigned int count,dist; // odometer
-volatile unsigned long split =0, oldtime = 0; // the millis time of last interrupt
+volatile unsigned long splitvelo=0,split =0, oldtime = 0; // the millis time of last interrupt
 
 int oldtenth;
 unsigned int olddist;
+
+
 
 
 void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
@@ -32,7 +36,7 @@ void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
   Wire.send((int)(eeaddress & 0xFF)); // LSB
   Wire.send(rdata);
   Wire.endTransmission();
-  delay(5);
+  delay(3);
 }
 
 byte i2c_eeprom_read_byte(unsigned int eeaddress ) {
@@ -68,6 +72,7 @@ void segment(int val) {
 }
 
 void serialsegments(int val) {  
+  // 4 digit display
   Serial.print(val / 1000, BYTE);
   Serial.print((val / 100) % 10, BYTE);
   Serial.print((val / 10) % 10, BYTE);
@@ -96,28 +101,41 @@ void speeddisp(int val) {
 }    
 
 void calculations(void) {
+  unsigned int calc = 0;
   unsigned long gap = 0;
   unsigned long now;
-  unsigned int calc = 0;
+  int calcave;  
 
   now = millis();
   gap = now - oldtime; 
+  // 2437 is a constant to get to mph 
+  calc = 2437/gap;
   
   // do not want to update speed every interrupt (too fast)
   // could average in the meantime?
-  if (  (now - split) > 250){  
-    // 2437 is a constant to get to mph 
-    calc = 2437/gap;
-    
+  if (  (now - split) > 250){ 
+    if ( splitcnt < 1 ){
+      calcave = splitvelo/1;
+    }
+    else{
+      calcave = splitvelo/splitcnt;
+    }
+      
     // the display will only show up to 99
-    if (  calc > 99 ){
+    if (  calcave > 99 ){
       velo = 99;
     }
     else {
-      velo = calc;
+      velo = calcave;
     }
     
+    splitvelo = calc;
+    splitcnt = 0;
     split = now;
+  }
+  else{
+    splitvelo += calc;
+    splitcnt++;
   }
   
   oldtime = now;
@@ -130,9 +148,7 @@ void calculations(void) {
   if (count > 1477) {
     dist += 1;
     serialsegments(dist);
-    
-    EEPROM.write(0,0); // tenth of a mile val
-    EEPROM.write(1,dist);
+    tenth = 0;
     count = 0;
   }
   // update eeprom with a 1/10th mile val
@@ -169,11 +185,6 @@ void calculations(void) {
         tenth = 9;
         break;
     }
-    // only write when travelled a 1/10th
-    if ( tenth != 0 ){
-      // cannot use wire from interrupt
-      EEPROM.write(0,tenth);
-    }
     count += 1;
   }
   
@@ -204,27 +215,17 @@ void setup() {
   
   // the odometer values
   tenth = i2c_eeprom_read_byte(10);
-  //tenth = EEPROM.read(0); // 1/10ths of a mile
   oldtenth = tenth;
   count = tenth * 464; // counts since last mile
   lsb = i2c_eeprom_read_byte(21);
   msb = i2c_eeprom_read_byte(20) ;
   dist = (msb << 8) | lsb;
-  //dist = EEPROM.read(1); // miles
-  olddist = dist;
-  
+  olddist = dist;  
   
   
   Serial.begin(57600); // Highest ser-disp will allow
   Serial.print('v');
   serialsegments(dist);
-  
-//  Serial.print(msb);
-//  Serial.print(':');
-//  Serial.print(lsb);
-//  Serial.print(tenth);
-//  Serial.print(':');
-//  Serial.println(dist);
 
   // Tested this interrupt with a dremel and a coloured mopwheel
   // similar to real-world setup. Worked at half-speed which calculates
@@ -236,28 +237,24 @@ void setup() {
 void loop() {
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
-  speeddisp(velo);   
-
+  speeddisp(velo);
 
   // This is the place to write to the i2ceeprom
   // wire.h does not like isr
 
-  if (dist > olddist){
+  if (dist != olddist){
     // eeprom stuff
     olddist = dist;
     int lsb,msb;
     msb = dist >> 8;
     lsb = dist & 0xFF;
-    //Serial.print(msb,BIN);
-    //Serial.print(':');
-    //Serial.println(lsb,BIN);
-    i2c_eeprom_write_byte(20,msb);
-    i2c_eeprom_write_byte(21,lsb);
-    i2c_eeprom_write_byte(10,0); // must mean tenth has zeroed as well
+    i2c_eeprom_write_byte(odomADDR,msb);
+    i2c_eeprom_write_byte((odomADDR + 1),lsb);
+    i2c_eeprom_write_byte(tenthADDR,0); // must mean tenth has zeroed as well
   }
-   else if (tenth > oldtenth){
+   else if (tenth != oldtenth){
     // eeprom stuff
     oldtenth = tenth;
-    i2c_eeprom_write_byte(10,tenth);
+    i2c_eeprom_write_byte(tenthADDR,tenth);
   }
 }
