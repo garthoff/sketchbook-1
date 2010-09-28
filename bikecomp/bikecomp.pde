@@ -97,45 +97,33 @@ void speeddisp(int val) {
   } 
   // delay is needed otherwise the 7segs do not
   // turn off quick enough (aliasing?) 
-  delay(5);
+  delay(8);
 }    
 
 void calculations(void) {
   unsigned int calc = 0;
   unsigned long gap = 0;
   unsigned long now;
-  int calcave;  
 
   now = millis();
   gap = now - oldtime; 
   // 2437 is a constant to get to mph 
-  calc = 2437/gap;
+  // because it's not float, can be =<1mph out (rounding error)
+  calc = 2437/gap; 
   
   // do not want to update speed every interrupt (too fast)
   // could average in the meantime?
-  if (  (now - split) > 250){ 
-    if ( splitcnt < 1 ){
-      calcave = splitvelo/1;
-    }
-    else{
-      calcave = splitvelo/splitcnt;
-    }
-      
+  if (  (now - split) > 333){       
     // the display will only show up to 99
-    if (  calcave > 99 ){
+    if (  calc > 99 ){
       velo = 99;
     }
     else {
-      velo = calcave;
+      // technically this should only change
+      // velo @1Hz, except it doesn't
+      velo = calc;
     }
-    
-    splitvelo = calc;
-    splitcnt = 0;
     split = now;
-  }
-  else{
-    splitvelo += calc;
-    splitcnt++;
   }
   
   oldtime = now;
@@ -146,7 +134,13 @@ void calculations(void) {
   // Would be a total of 100k writes per 10,000miles (max of display)
   // 100k is max erase/write cycles of At168 (datasheet)
   if (count > 1477) {
-    dist += 1;
+    if (dist >= 9999){
+      dist = 0;
+    }
+    else{
+      dist += 1;
+    }
+
     serialsegments(dist);
     tenth = 0;
     count = 0;
