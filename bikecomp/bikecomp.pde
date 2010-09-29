@@ -1,32 +1,38 @@
 #include <EEPROM.h>
 #include <Wire.h>
+
+// ===eeprom stuff===
 #define DEV_ADDR 0x50 //eeprom addr
 const char HASH[] = "812500507"; // eeprom hash
-// values required per integer to be shown on 7seg
-const int array[] = {64,118,33,36,22,12,8,102,0,6}; 
 const int tenthADDR = 10; // Address in EEPROM
 const int odomADDR = 20;
 
+// ===Serial2parallel===
 int latchPin = 11; //ST_CP of 74HC595
 int clockPin = 10; //SH_CP of 74HC595
 int dataPin = 12; // DS of 74HC595
-int ignition = 9;
 
+// ===Motorbike operations===
+int ignition = 13;
+int modePin = 7; // In parking mode or not
+int parkPin = 6; // use parking light circuits
+int normPin = 5; // use normal operation circuits
 
+// ===2digit 7segment===
 int val1pin = 3; // segment 1
 int val2pin = 4; // segment 2
-
 boolean seg1 = true;
 boolean seg2 = false;
+// values required per integer to be shown on 7seg
+const int array[] = {64,118,33,36,22,12,8,102,0,6}; 
+
 
 volatile int splitcnt=0,tenth,velo = 0; // speed 
 volatile unsigned int count,dist; // odometer
-volatile unsigned long splitvelo=0,split =0, oldtime = 0; // the millis time of last interrupt
+volatile unsigned long splitvelo=0,split=0, oldtime = 0; // the millis time of last interrupt
 
 int oldtenth;
 unsigned int olddist;
-
-
 
 
 void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
@@ -113,7 +119,7 @@ void calculations(void) {
   
   // do not want to update speed every interrupt (too fast)
   // could average in the meantime?
-  if (  (now - split) > 333){       
+  if ( (now - split) > 333 ){       
     // the display will only show up to 99
     if (  calc > 99 ){
       velo = 99;
@@ -125,7 +131,6 @@ void calculations(void) {
     }
     split = now;
   }
-  
   oldtime = now;
 
   // Odometer calculations
@@ -184,28 +189,36 @@ void calculations(void) {
   
 }
 
+
 void setup() {
   unsigned int lsb,msb;
   //set pins to output so you can control the shift register
   Wire.begin();
   
+  // outputs that are crucial in preventing
+  // unsecure use (e.g. no key)
   pinMode(ignition, OUTPUT);
+  pinMode(parkPin, OUTPUT);
+  pinMode(normPin, OUTPUT);
   
   // If the hash in the keyfob(eeprom) does not 
-  // read correctly, wait forever
-  while ( check_hash()  == false) {
+  // read correctly, wait forever  
+  while ( check_hash() == false ){
     digitalWrite(ignition, LOW); // ensure ignition is disabled
+    digitalWrite(parkPin, LOW); // ensure lights are off
+    digitalWrite(normPin, LOW); // ensure lights are off
+    digitalWrite(val1pin, HIGH);
+    digitalWrite(val2pin, HIGH);
     delay(1000);
   }
+  // enable ignition
+  digitalWrite(ignition, HIGH);
   
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
   pinMode(val1pin, OUTPUT);
   pinMode(val2pin, OUTPUT);
-  
-  // enable ignition
-  digitalWrite(ignition, HIGH);
   
   // the odometer values
   tenth = i2c_eeprom_read_byte(10);
@@ -214,17 +227,12 @@ void setup() {
   lsb = i2c_eeprom_read_byte(21);
   msb = i2c_eeprom_read_byte(20) ;
   dist = (msb << 8) | lsb;
-  olddist = dist;  
-  
+  olddist = dist;    
   
   Serial.begin(57600); // Highest ser-disp will allow
-  Serial.print('v');
+  Serial.print('v'); // reset to '0000'
   serialsegments(dist);
 
-  // Tested this interrupt with a dremel and a coloured mopwheel
-  // similar to real-world setup. Worked at half-speed which calculates
-  // to 720MPH or ~56000rpm of the dremel. At any higher speed the time to
-  // increment a mile takes longer.
   attachInterrupt(0, calculations, CHANGE); // pin 3
 }
 
@@ -232,11 +240,26 @@ void loop() {
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
   speeddisp(velo);
+  
+  // If the check_hash() interrupts the display
+  // i'm not seeing it
+  while (check_hash() == false){
+    digitalWrite(ignition, LOW);
+    digitalWrite(parkPin, LOW);
+    digitalWrite(normPin, LOW); 
+    digitalWrite(val1pin, LOW);
+    digitalWrite(val2pin, LOW);
+    Serial.print('-',BYTE);
+    Serial.print('-',BYTE);
+    Serial.print('-',BYTE);
+    Serial.print('-',BYTE);
+  }
+  digitalWrite(ignition, HIGH);
+  serialsegments(dist);
 
   // This is the place to write to the i2ceeprom
   // wire.h does not like isr
-
-  if (dist != olddist){
+  if (dist != olddist){    
     // eeprom stuff
     olddist = dist;
     int lsb,msb;
@@ -246,7 +269,7 @@ void loop() {
     i2c_eeprom_write_byte((odomADDR + 1),lsb);
     i2c_eeprom_write_byte(tenthADDR,0); // must mean tenth has zeroed as well
   }
-   else if (tenth != oldtenth){
+  else if (tenth != oldtenth){    
     // eeprom stuff
     oldtenth = tenth;
     i2c_eeprom_write_byte(tenthADDR,tenth);
