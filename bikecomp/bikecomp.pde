@@ -237,6 +237,7 @@ void setup() {
 }
 
 void loop() {
+  boolean halt = false;
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
   speeddisp(velo);
@@ -244,6 +245,7 @@ void loop() {
   // If the check_hash() interrupts the display
   // i'm not seeing it
   while (check_hash() == false){
+    halt = true;
     digitalWrite(ignition, LOW);
     digitalWrite(parkPin, LOW);
     digitalWrite(normPin, LOW); 
@@ -254,8 +256,13 @@ void loop() {
     Serial.print('-',BYTE);
     Serial.print('-',BYTE);
   }
-  digitalWrite(ignition, HIGH);
-  serialsegments(dist);
+  // to prevent unnecesary calls
+  // causing flicker
+  if ( halt == true ){
+    halt = false;
+    digitalWrite(ignition, HIGH);
+    serialsegments(dist);    
+  }
 
   // This is the place to write to the i2ceeprom
   // wire.h does not like isr
