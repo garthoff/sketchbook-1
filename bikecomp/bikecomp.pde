@@ -24,7 +24,8 @@ int val2pin = 4; // segment 2
 boolean seg1 = true;
 boolean seg2 = false;
 // values required per integer to be shown on 7seg
-const int array[] = {64,118,33,36,22,12,8,102,0,6}; 
+//const int array[] = {64,118,33,36,22,12,8,102,0,6}; // Common anode vals
+const int array[] = {63,12,91,94,108,118,119,28,127,124,0}; // Common cathode vals. '0' is to blank 7seg
 
 
 volatile int splitcnt=0,tenth,velo = 0; // speed 
@@ -70,11 +71,10 @@ boolean check_hash(){
   return true;
 }
 
-
-void segment(int val) {  
-  digitalWrite(latchPin, LOW);      
+void segment(int val) { 
+  digitalWrite(latchPin, LOW); 
   shiftOut(dataPin, clockPin, MSBFIRST, array[val]);  
-  digitalWrite(latchPin, HIGH); 
+  digitalWrite(latchPin, HIGH);
 }
 
 void serialsegments(int val) {  
@@ -90,6 +90,9 @@ void speeddisp(int val) {
   // will only update 1 segment (multiplexing)
   seg1 = !seg1;
   seg2 = !seg2;
+  // this is needed to prevent bleeding over to next digit. It blanks
+  // the shifter outputs
+  segment(10); 
   if ( seg1 != true) {
     digitalWrite(val2pin, LOW);
     digitalWrite(val1pin, HIGH);
@@ -100,10 +103,7 @@ void speeddisp(int val) {
     digitalWrite(val1pin, LOW);
     digitalWrite(val2pin, HIGH);
     segment(val % 10);
-  } 
-  // delay is needed otherwise the 7segs do not
-  // turn off quick enough (aliasing?) 
-  delay(8);
+  }
 }    
 
 void calculations(void) {
@@ -118,15 +118,12 @@ void calculations(void) {
   calc = 2437/gap; 
   
   // do not want to update speed every interrupt (too fast)
-  // could average in the meantime?
   if ( (now - split) > 333 ){       
     // the display will only show up to 99
     if (  calc > 99 ){
       velo = 99;
     }
     else {
-      // technically this should only change
-      // velo @1Hz, except it doesn't
       velo = calc;
     }
     split = now;
@@ -241,6 +238,16 @@ void loop() {
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
   speeddisp(velo);
+  
+  // mode
+  if ( digitalRead(modePin) == LOW ) {
+    digitalWrite(normPin, HIGH);
+    digitalWrite(parkPin, LOW);
+  }
+  else{
+    digitalWrite(normPin, LOW);
+    digitalWrite(parkPin, HIGH);   
+  }
   
   // If the check_hash() interrupts the display
   // i'm not seeing it
