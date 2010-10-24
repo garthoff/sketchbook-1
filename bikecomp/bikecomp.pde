@@ -1,3 +1,5 @@
+// TODO: replace EEPROM with FRAM so can store each count change
+
 #include <EEPROM.h>
 #include <Wire.h>
 
@@ -55,6 +57,7 @@ byte i2c_eeprom_read_byte(unsigned int eeaddress ) {
   Wire.requestFrom(DEV_ADDR,1);
   if (Wire.available()) rdata = Wire.receive();
     return rdata;
+  
 }
 
 
@@ -201,7 +204,7 @@ void setup() {
   // If the hash in the keyfob(eeprom) does not 
   // read correctly, wait forever  
   while ( check_hash() == false ){
-    digitalWrite(ignition, LOW); // ensure ignition is disabled
+    digitalWrite(ignition, HIGH); // ensure ignition is disabled
     digitalWrite(parkPin, LOW); // ensure lights are off
     digitalWrite(normPin, LOW); // ensure lights are off
     digitalWrite(val1pin, HIGH);
@@ -209,7 +212,7 @@ void setup() {
     delay(1000);
   }
   // enable ignition
-  digitalWrite(ignition, HIGH);
+  digitalWrite(ignition, LOW);
   
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
@@ -224,7 +227,7 @@ void setup() {
   lsb = i2c_eeprom_read_byte(21);
   msb = i2c_eeprom_read_byte(20) ;
   dist = (msb << 8) | lsb;
-  olddist = dist;    
+  olddist = dist;
   
   Serial.begin(57600); // Highest ser-disp will allow
   Serial.print('v'); // reset to '0000'
@@ -253,21 +256,24 @@ void loop() {
   // i'm not seeing it
   while (check_hash() == false){
     halt = true;
-    digitalWrite(ignition, LOW);
+    detachInterrupt(0); // make sure odometer does nowt
+    
+    digitalWrite(ignition, HIGH); // disable ignition
     digitalWrite(parkPin, LOW);
     digitalWrite(normPin, LOW); 
     digitalWrite(val1pin, LOW);
     digitalWrite(val2pin, LOW);
-    Serial.print('-',BYTE);
-    Serial.print('-',BYTE);
-    Serial.print('-',BYTE);
-    Serial.print('-',BYTE);
+    // maybe blank instead if in park mode
+    for(int z=0;z<4;z++){
+      Serial.print('-',BYTE);
+    }
+    
   }
   // to prevent unnecesary calls
-  // causing flicker
   if ( halt == true ){
     halt = false;
-    digitalWrite(ignition, HIGH);
+    attachInterrupt(0, calculations, CHANGE); //re-enable the odometer functionality
+    digitalWrite(ignition, LOW); // turn ignition back on
     serialsegments(dist);    
   }
 
