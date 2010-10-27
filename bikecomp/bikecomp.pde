@@ -17,12 +17,12 @@ int dataPin = 12; // DS of 74HC595
 // ===Motorbike operations===
 int ignition = 13;
 int modePin = 7; // In parking mode or not
-int parkPin = 6; // use parking light circuits
-int normPin = 5; // use normal operation circuits
+int parkPin = 5; // use parking light circuits
+int normPin = 6; // use normal operation circuits
 
 // ===2digit 7segment===
-int val1pin = 3; // segment 1
-int val2pin = 4; // segment 2
+int val1pin = 8; // segment 1
+int val2pin = 9; // segment 2
 boolean seg1 = true;
 boolean seg2 = false;
 // values required per integer to be shown on 7seg
