@@ -242,11 +242,12 @@ void loop() {
   // the time as the 7segs are being multiplexed
   speeddisp(velo);
   
-  // mode
+  // Normal mode
   if ( digitalRead(modePin) == LOW ) {
     digitalWrite(normPin, HIGH);
     digitalWrite(parkPin, LOW);
   }
+  // Park mode
   else{
     digitalWrite(normPin, LOW);
     digitalWrite(parkPin, HIGH);   
@@ -259,13 +260,21 @@ void loop() {
     detachInterrupt(0); // make sure odometer does nowt
     
     digitalWrite(ignition, HIGH); // disable ignition
-    digitalWrite(parkPin, LOW);
     digitalWrite(normPin, LOW); 
     digitalWrite(val1pin, LOW);
     digitalWrite(val2pin, LOW);
-    // maybe blank instead if in park mode
-    for(int z=0;z<4;z++){
-      Serial.print('-',BYTE);
+    
+    if (digitalRead(modePin) == LOW ) {
+      digitalWrite(parkPin, LOW);
+      for(int z=0;z<4;z++){
+        Serial.print('-',BYTE);
+      }
+    }
+    // In park-mode and pulled out key
+    else{      
+      digitalWrite(parkPin, HIGH);
+      //FIXME: we want to blank this!
+      Serial.print('v'); // reset to '0000' 
     }
     
   }
