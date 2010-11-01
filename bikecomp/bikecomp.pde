@@ -214,6 +214,10 @@ void setup() {
   // enable ignition
   digitalWrite(ignition, LOW);
   
+  // Internal pullup
+  pinMode(modePin, INPUT);
+  digitalWrite(modePin, HIGH);
+  
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
