@@ -36,6 +36,7 @@ volatile unsigned long splitvelo=0,split=0, oldtime = 0; // the millis time of l
 
 int oldtenth;
 unsigned int olddist;
+boolean halt = false;
 
 
 void i2c_eeprom_write_byte(unsigned int eeaddress, byte data ) {
@@ -192,19 +193,24 @@ void calculations(void) {
 
 void setup() {
   unsigned int lsb,msb;
+  
   //set pins to output so you can control the shift register
   Wire.begin();
+  
+  // Without this odometer defaults to 0s. Need it blank
+  Serial.begin(57600); // Highest ser-disp will allow
+  Serial.print('v');
   
   // outputs that are crucial in preventing
   // unsecure use (e.g. no key)
   pinMode(ignition, OUTPUT);
+  digitalWrite(ignition, HIGH); // ensure ignition is disabled
   pinMode(parkPin, OUTPUT);
   pinMode(normPin, OUTPUT);
   
   // If the hash in the keyfob(eeprom) does not 
   // read correctly, wait forever  
   while ( check_hash() == false ){
-    digitalWrite(ignition, HIGH); // ensure ignition is disabled
     digitalWrite(parkPin, LOW); // ensure lights are off
     digitalWrite(normPin, LOW); // ensure lights are off
     digitalWrite(val1pin, HIGH);
@@ -213,6 +219,10 @@ void setup() {
   }
   // enable ignition
   digitalWrite(ignition, LOW);
+  /* To have the parklights enabled with switch
+  on the bars, need another input to MCU. No harm
+  in having the parklights on all the time */
+  digitalWrite(parkPin, HIGH);
   
   // Internal pullup
   pinMode(modePin, INPUT);
@@ -232,29 +242,32 @@ void setup() {
   msb = i2c_eeprom_read_byte(20) ;
   dist = (msb << 8) | lsb;
   olddist = dist;
-  
-  Serial.begin(57600); // Highest ser-disp will allow
-  Serial.print('v'); // reset to '0000'
-  serialsegments(dist);
 
   attachInterrupt(0, calculations, CHANGE); // pin 3
+  
+  serialsegments(dist); // Enter EEPROM distance into odometer
 }
 
 void loop() {
-  boolean halt = false;
+  
   // The only thing that needs to run all
   // the time as the 7segs are being multiplexed
   speeddisp(velo);
+  digitalWrite(parkPin, HIGH);
   
-  // Normal mode
+  // Normal mode: Everything ON
   if ( digitalRead(modePin) == LOW ) {
     digitalWrite(normPin, HIGH);
-    digitalWrite(parkPin, LOW);
+    digitalWrite(ignition, LOW);
+
   }
-  // Park mode
-  else{
+  // Park mode: No ignition. No main-circuit
+  else{      
+    detachInterrupt(0); // make sure odometer does nowt
+    digitalWrite(ignition,HIGH);
     digitalWrite(normPin, LOW);
-    digitalWrite(parkPin, HIGH);   
+    velo = 0;
+    halt = true;
   }
   
   // If the check_hash() interrupts the display
@@ -277,17 +290,20 @@ void loop() {
     // In park-mode and pulled out key
     else{      
       digitalWrite(parkPin, HIGH);
-      //FIXME: we want to blank this!
-      Serial.print('v'); // reset to '0000' 
-    }
-    
+      // Blanks odometer
+      Serial.print('v'); 
+    }    
   }
+  
   // to prevent unnecesary calls
   if ( halt == true ){
-    halt = false;
-    attachInterrupt(0, calculations, CHANGE); //re-enable the odometer functionality
-    digitalWrite(ignition, LOW); // turn ignition back on
-    serialsegments(dist);    
+    // Only re-enable intr if in NORM mode
+    if ( digitalRead(modePin) == LOW ) {
+      attachInterrupt(0, calculations, CHANGE); //re-enable the odometer functionality
+      digitalWrite(ignition, LOW); // turn ignition back on
+      serialsegments(dist);  
+      halt = false;
+    }  
   }
 
   // This is the place to write to the i2ceeprom
